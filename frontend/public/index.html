@@ -1,0 +1,1189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simple Dominos — Strategy Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --panel: #0d1117;
+    --border: #1a1f2b;
+    --text: #c0f0c0;
+    --text-dim: #4a6a4a;
+    --text-mid: #6a9a6a;
+    --neon-green: #39ff14;
+    --neon-cyan: #00ffcc;
+    --neon-pink: #ff0080;
+    --neon-yellow: #ffff00;
+    --neon-orange: #ff6600;
+    --pixel-font: 'Press Start 2P', monospace;
+  }
+
+  body {
+    font-family: var(--pixel-font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem 1rem;
+    position: relative;
+    image-rendering: pixelated;
+  }
+
+  /* CRT scanline overlay */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.15) 2px,
+      rgba(0, 0, 0, 0.15) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* CRT vignette */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.6) 100%);
+    pointer-events: none;
+    z-index: 9998;
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+  }
+
+  h1 {
+    font-family: var(--pixel-font);
+    font-size: 1.1rem;
+    color: #6abf5e;
+    margin-bottom: 0.2rem;
+    text-shadow: 0 0 8px rgba(57, 255, 20, 0.25);
+    letter-spacing: 0.05em;
+  }
+
+  .title-decoration {
+    font-family: var(--pixel-font);
+    font-size: 0.55rem;
+    color: var(--neon-cyan);
+    text-shadow: 0 0 8px rgba(0, 255, 204, 0.4);
+    letter-spacing: 0.2em;
+  }
+
+  .subtitle {
+    font-family: var(--pixel-font);
+    color: var(--text-dim);
+    font-size: 0.5rem;
+    margin-top: 0.8rem;
+    line-height: 1.8;
+  }
+
+  .subtitle a {
+    color: var(--neon-cyan);
+    text-decoration: none;
+    text-shadow: 0 0 6px rgba(0, 255, 204, 0.3);
+  }
+  .subtitle a:hover { text-shadow: 0 0 12px rgba(0, 255, 204, 0.6); }
+
+  h2 {
+    font-family: var(--pixel-font);
+    font-size: 0.6rem;
+    font-weight: 400;
+    margin-top: 2.5rem;
+    margin-bottom: 1rem;
+    color: #5a9a8a;
+    text-shadow: 0 0 6px rgba(0, 255, 204, 0.15);
+    letter-spacing: 0.1em;
+  }
+
+  .controls {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  button {
+    font-family: var(--pixel-font);
+    padding: 0.6rem 1.2rem;
+    border: 2px solid var(--neon-green);
+    background: transparent;
+    font-size: 0.55rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    image-rendering: pixelated;
+  }
+
+  .btn-start {
+    color: var(--neon-green);
+    text-shadow: 0 0 6px rgba(57, 255, 20, 0.4);
+    box-shadow: 0 0 8px rgba(57, 255, 20, 0.2), inset 0 0 8px rgba(57, 255, 20, 0.1);
+  }
+  .btn-start:hover {
+    background: rgba(57, 255, 20, 0.15);
+    box-shadow: 0 0 16px rgba(57, 255, 20, 0.4), inset 0 0 12px rgba(57, 255, 20, 0.15);
+  }
+  .btn-start:disabled { opacity: 0.3; cursor: default; }
+
+  .btn-reset {
+    color: var(--text-mid);
+    border-color: var(--text-mid);
+    box-shadow: 0 0 4px rgba(106, 154, 106, 0.2);
+  }
+  .btn-reset:hover {
+    background: rgba(106, 154, 106, 0.1);
+    box-shadow: 0 0 8px rgba(106, 154, 106, 0.3);
+  }
+
+  .speed-control {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--text-dim);
+    font-family: var(--pixel-font);
+    font-size: 0.45rem;
+  }
+
+  .speed-control input[type="range"] {
+    width: 70px;
+    accent-color: var(--neon-green);
+  }
+
+  .game-counter {
+    font-family: var(--pixel-font);
+    font-size: 0.5rem;
+    color: var(--neon-green);
+    text-shadow: 0 0 6px rgba(57, 255, 20, 0.3);
+    font-variant-numeric: tabular-nums;
+    min-width: 180px;
+    text-align: right;
+  }
+
+  .leaderboard {
+    width: 100%;
+    max-width: 700px;
+    position: relative;
+  }
+
+  .strat-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    position: absolute;
+    left: 0;
+    right: 0;
+    transition: top 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    height: 48px;
+  }
+
+  .rank {
+    font-family: var(--pixel-font);
+    font-size: 0.5rem;
+    color: var(--text-dim);
+    width: 30px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .color-dot {
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
+    image-rendering: pixelated;
+  }
+
+  .strat-name {
+    font-family: var(--pixel-font);
+    font-size: 0.5rem;
+    color: var(--text);
+    width: 140px;
+    flex-shrink: 0;
+  }
+
+  .wr-bar-container {
+    flex: 1;
+    height: 16px;
+    background: var(--border);
+    overflow: hidden;
+    position: relative;
+  }
+
+  .wr-bar {
+    height: 100%;
+    transition: width 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    min-width: 2px;
+    image-rendering: pixelated;
+  }
+
+  .wr-value {
+    font-family: var(--pixel-font);
+    font-size: 0.5rem;
+    width: 60px;
+    text-align: right;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+    color: var(--neon-green);
+    text-shadow: 0 0 4px rgba(57, 255, 20, 0.3);
+  }
+
+  .stats-table {
+    width: 100%;
+    max-width: 700px;
+    margin-top: 1.5rem;
+    border-collapse: collapse;
+    font-family: var(--pixel-font);
+    font-size: 0.42rem;
+    opacity: 0;
+    transition: opacity 0.5s;
+  }
+
+  .stats-table.visible { opacity: 1; }
+
+  .stats-table th {
+    color: var(--neon-cyan);
+    font-weight: 400;
+    text-align: right;
+    padding: 0.5rem 0.4rem;
+    border-bottom: 1px solid var(--border);
+    text-shadow: 0 0 4px rgba(0, 255, 204, 0.3);
+  }
+
+  .stats-table th:first-child, .stats-table td:first-child {
+    text-align: left;
+  }
+
+  .stats-table td {
+    padding: 0.5rem 0.4rem;
+    text-align: right;
+    border-bottom: 1px solid #111622;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+  }
+
+  /* Team leaderboard */
+  .team-table {
+    width: 100%;
+    max-width: 700px;
+    margin-top: 0.75rem;
+    border-collapse: collapse;
+    font-family: var(--pixel-font);
+    font-size: 0.42rem;
+  }
+
+  .team-table th {
+    color: var(--neon-cyan);
+    font-weight: 400;
+    text-align: right;
+    padding: 0.5rem 0.4rem;
+    border-bottom: 1px solid var(--border);
+    text-shadow: 0 0 4px rgba(0, 255, 204, 0.3);
+  }
+
+  .team-table th:first-child, .team-table td:first-child {
+    text-align: left;
+  }
+
+  .team-table td {
+    padding: 0.5rem 0.4rem;
+    text-align: right;
+    border-bottom: 1px solid #111622;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+  }
+
+  /* Game browser */
+  .game-browser {
+    width: 100%;
+    max-width: 700px;
+    margin-top: 0.75rem;
+  }
+
+  .browser-controls {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .browser-controls input[type="text"] {
+    flex: 1;
+    min-width: 150px;
+    padding: 0.5rem 0.6rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--pixel-font);
+    font-size: 0.42rem;
+    outline: none;
+  }
+  .browser-controls input[type="text"]:focus { border-color: var(--neon-green); box-shadow: 0 0 6px rgba(57, 255, 20, 0.2); }
+  .browser-controls input[type="text"]::placeholder { color: var(--text-dim); }
+
+  .browser-controls select {
+    padding: 0.5rem 0.4rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--pixel-font);
+    font-size: 0.42rem;
+    cursor: pointer;
+    outline: none;
+  }
+  .browser-controls select:focus { border-color: var(--neon-green); box-shadow: 0 0 6px rgba(57, 255, 20, 0.2); }
+
+  .game-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .game-row {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    font-size: 0.42rem;
+  }
+  .game-row:hover { border-color: var(--neon-green); box-shadow: 0 0 4px rgba(57, 255, 20, 0.15); }
+
+  .game-row-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .game-id {
+    font-family: var(--pixel-font);
+    font-weight: 400;
+    color: var(--neon-cyan);
+    font-size: 0.42rem;
+    min-width: 60px;
+    text-shadow: 0 0 4px rgba(0, 255, 204, 0.3);
+  }
+
+  .game-teams {
+    flex: 1;
+    margin: 0 0.5rem;
+    font-family: var(--pixel-font);
+    font-size: 0.4rem;
+  }
+
+  .game-teams .vs { color: var(--text-dim); margin: 0 0.3rem; }
+
+  .game-result {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    font-size: 0.4rem;
+  }
+
+  .badge {
+    font-family: var(--pixel-font);
+    padding: 0.2rem 0.4rem;
+    font-size: 0.38rem;
+    border: 1px solid;
+  }
+
+  .badge-a { border-color: var(--neon-cyan); color: var(--neon-cyan); }
+  .badge-b { border-color: var(--neon-orange); color: var(--neon-orange); }
+  .badge-draw { border-color: var(--text-dim); color: var(--text-dim); }
+  .badge-stalemate { border-color: var(--neon-pink); color: var(--neon-pink); }
+  .badge-stalemate-win { border-color: var(--text-dim); color: var(--text-dim); }
+
+  .game-detail {
+    display: none;
+    margin-top: 0.4rem;
+    padding-top: 0.4rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.4rem;
+    color: var(--text-mid);
+  }
+  .game-row.expanded .game-detail { display: block; }
+
+  .game-detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.3rem 1rem;
+  }
+
+  .move-list {
+    margin-top: 0.5rem;
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    padding: 0.4rem;
+    font-family: var(--pixel-font);
+    font-size: 0.38rem;
+    line-height: 2;
+  }
+
+  .move-item {
+    display: flex;
+    gap: 0.4rem;
+    padding: 0.1rem 0.3rem;
+  }
+
+  .move-item:nth-child(odd) { background: rgba(57, 255, 20, 0.03); }
+
+  .move-num {
+    color: var(--text-dim);
+    min-width: 24px;
+    text-align: right;
+  }
+
+  .move-seat { min-width: 16px; }
+  .move-seat.team-a { color: var(--neon-cyan); }
+  .move-seat.team-b { color: var(--neon-orange); }
+
+  .move-strat {
+    color: var(--text-mid);
+    min-width: 100px;
+  }
+
+  .move-tile {
+    color: var(--text);
+    min-width: 40px;
+  }
+
+  .move-end { color: var(--neon-green); }
+  .move-pass { color: var(--neon-pink); font-style: italic; }
+
+  .load-more-btn {
+    font-family: var(--pixel-font);
+    margin-top: 0.75rem;
+    width: 100%;
+    padding: 0.6rem;
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    font-size: 0.45rem;
+    text-transform: uppercase;
+  }
+  .load-more-btn:hover { border-color: var(--neon-green); box-shadow: 0 0 6px rgba(57, 255, 20, 0.2); }
+
+  .result-count {
+    font-family: var(--pixel-font);
+    font-size: 0.4rem;
+    color: var(--text-dim);
+    margin-bottom: 0.5rem;
+  }
+
+  /* Win rate line chart */
+  .chart-container {
+    width: 100%;
+    max-width: 700px;
+    margin-top: 0.75rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 1rem;
+    position: relative;
+  }
+
+  .chart-container canvas {
+    width: 100%;
+    height: 300px;
+    display: block;
+  }
+
+  .chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem 1.2rem;
+    margin-top: 0.6rem;
+    font-family: var(--pixel-font);
+    font-size: 0.4rem;
+  }
+
+  .chart-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    cursor: pointer;
+    opacity: 1;
+    transition: opacity 0.15s;
+    color: var(--text);
+  }
+
+  .chart-legend-item.dimmed { opacity: 0.3; }
+
+  .chart-legend-swatch {
+    width: 10px;
+    height: 4px;
+  }
+
+  .loading {
+    font-family: var(--pixel-font);
+    color: var(--neon-green);
+    font-size: 0.55rem;
+    margin-top: 3rem;
+    text-shadow: 0 0 8px rgba(57, 255, 20, 0.4);
+    animation: blink 1s step-end infinite;
+  }
+
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+
+  /* Pixelated domino decoration */
+  .domino-deco {
+    display: inline-block;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    letter-spacing: 0.3em;
+    margin-bottom: 0.3rem;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="domino-deco">&#x1F062; &#x1F04B; &#x1F053;</div>
+  <h1>DOMINOS</h1>
+  <div class="title-decoration">STRATEGY LAB</div>
+  <p class="subtitle">8 strategies compete in 4P Pairs &mdash; <a href="play.html">PLAY &gt;</a></p>
+</div>
+
+<div class="controls">
+  <button class="btn-start" id="startBtn">&#9654; Start</button>
+  <button class="btn-reset" id="resetBtn">Reset</button>
+  <div class="speed-control">
+    <label for="speed">SPD</label>
+    <input type="range" id="speed" min="1" max="10" value="5">
+  </div>
+  <div class="game-counter" id="counter">READY_</div>
+</div>
+
+<h2>&#9608; WIN RATE LEADERBOARD</h2>
+<div class="leaderboard" id="leaderboard"></div>
+<table class="stats-table" id="statsTable">
+  <thead>
+    <tr>
+      <th>Strategy</th><th>Win%</th><th>W</th><th>L</th><th>D</th><th>Games</th><th>Avg Pips</th>
+    </tr>
+  </thead>
+  <tbody id="statsBody"></tbody>
+</table>
+
+<h2>&#9608; WIN RATE OVER TIME</h2>
+<div class="chart-container">
+  <canvas id="wrChart"></canvas>
+  <div class="chart-legend" id="chartLegend"></div>
+</div>
+
+<h2 id="doublesTitle">&#9608; SAME-STRATEGY PAIRS</h2>
+<table class="team-table" id="doublesTable">
+  <thead>
+    <tr>
+      <th>Team</th><th>Win%</th><th>W</th><th>L</th><th>D</th><th>Games</th>
+    </tr>
+  </thead>
+  <tbody id="doublesBody"></tbody>
+</table>
+
+<h2 id="teamLeaderboardTitle">&#9608; TOP MIXED TEAMS</h2>
+<table class="team-table" id="teamTable">
+  <thead>
+    <tr>
+      <th>Team</th><th>Win%</th><th>W</th><th>L</th><th>D</th><th>Games</th>
+    </tr>
+  </thead>
+  <tbody id="teamBody"></tbody>
+</table>
+
+<h2>&#9608; GAME BROWSER</h2>
+<div class="game-browser">
+  <div class="browser-controls">
+    <input type="text" id="searchInput" placeholder="Search game ID or strategy...">
+    <select id="stratFilter">
+      <option value="">All Strategies</option>
+    </select>
+    <select id="resultFilter">
+      <option value="">All Results</option>
+      <option value="A">Team A Win</option>
+      <option value="B">Team B Win</option>
+      <option value="draw">Draw</option>
+    </select>
+    <select id="stalemateFilter">
+      <option value="">All</option>
+      <option value="yes">Stalemate</option>
+      <option value="no">Not Stalemate</option>
+    </select>
+  </div>
+  <div class="result-count" id="resultCount"></div>
+  <div class="game-list" id="gameList"></div>
+  <button class="load-more-btn" id="loadMoreBtn" style="display:none">Load More...</button>
+</div>
+
+<p class="loading" id="loadingMsg">LOADING DATA...</p>
+
+<script>
+const COLORS = [
+  '#ff0080', '#00ffcc', '#39ff14', '#d2a8ff',
+  '#ff6600', '#ff4444', '#ffff00', '#00aaff'
+];
+
+const ROW_HEIGHT = 56;
+const PAGE_SIZE = 50;
+
+let data = null;
+let animTimer = null;
+let animFrame = 0;
+let keyframes = [];
+let stratNames = [];
+let filteredGames = [];
+let displayedCount = 0;
+
+function cleanName(name) {
+  return name.replace(/Strategy$/, '');
+}
+
+async function loadData() {
+  try {
+    const resp = await fetch('data/results.json');
+    data = await resp.json();
+    document.getElementById('loadingMsg').style.display = 'none';
+    init();
+  } catch (e) {
+    document.getElementById('loadingMsg').textContent = 'LOAD FAILED. RUN SIMULATION FIRST.';
+    document.getElementById('loadingMsg').style.animation = 'none';
+  }
+}
+
+function init() {
+  stratNames = data.leaderboard.map(s => s.name);
+  chartFrameLimit = null;
+  buildKeyframes();
+  renderLeaderboard();
+  populateStratFilter();
+  renderTeamLeaderboard();
+  buildChartLegend();
+  renderChart();
+  showFrame(0);
+  applyFilters();
+}
+
+function buildKeyframes() {
+  // Build win rate over time from game data
+  const games = data.games || [];
+  const wins = {}, losses = {};
+  for (const name of stratNames) { wins[name] = 0; losses[name] = 0; }
+
+  const numFrames = 200;
+  const step = Math.max(1, Math.floor(games.length / numFrames));
+  keyframes = [];
+
+  for (let i = 0; i < games.length; i++) {
+    const g = games[i];
+
+    // Update per-strategy wins/losses
+    for (let seat = 0; seat < 4; seat++) {
+      const strat = g.strategies[seat];
+      const team = (seat === 0 || seat === 2) ? 'A' : 'B';
+      if (g.winner_team === team) {
+        wins[strat] = (wins[strat] || 0) + 1;
+      } else if (g.winner_team !== null) {
+        losses[strat] = (losses[strat] || 0) + 1;
+      }
+    }
+
+    if ((i + 1) % step === 0 || i === games.length - 1) {
+      const frame = { game: i + 1, winRates: {} };
+      for (const name of stratNames) {
+        const w = wins[name] || 0;
+        const l = losses[name] || 0;
+        frame.winRates[name] = (w + l) > 0 ? w / (w + l) : 0.5;
+      }
+      keyframes.push(frame);
+    }
+  }
+
+  // If no games, add a default frame
+  if (keyframes.length === 0) {
+    const frame = { game: 0, winRates: {} };
+    for (const name of stratNames) frame.winRates[name] = 0.5;
+    keyframes.push(frame);
+  }
+}
+
+function renderLeaderboard() {
+  const lb = document.getElementById('leaderboard');
+  lb.innerHTML = '';
+  lb.style.height = (stratNames.length * ROW_HEIGHT) + 'px';
+
+  stratNames.forEach((name, i) => {
+    const row = document.createElement('div');
+    row.className = 'strat-row';
+    row.id = 'row-' + name;
+    row.innerHTML = `
+      <span class="rank" id="rank-${name}">#${i + 1}</span>
+      <span class="color-dot" style="background:${COLORS[i]}"></span>
+      <span class="strat-name">${cleanName(name)}</span>
+      <div class="wr-bar-container">
+        <div class="wr-bar" id="bar-${name}" style="background:${COLORS[i]};width:50%"></div>
+      </div>
+      <span class="wr-value" id="wr-${name}">50.0%</span>
+    `;
+    row.style.top = (i * ROW_HEIGHT) + 'px';
+    lb.appendChild(row);
+  });
+}
+
+function showFrame(idx) {
+  if (idx >= keyframes.length) idx = keyframes.length - 1;
+  const frame = keyframes[idx];
+
+  const sorted = stratNames.slice().sort((a, b) => (frame.winRates[b] || 0.5) - (frame.winRates[a] || 0.5));
+
+  sorted.forEach((name, rank) => {
+    const wr = frame.winRates[name] || 0.5;
+    const row = document.getElementById('row-' + name);
+    const bar = document.getElementById('bar-' + name);
+    const wrEl = document.getElementById('wr-' + name);
+    const rankEl = document.getElementById('rank-' + name);
+
+    if (row) row.style.top = (rank * ROW_HEIGHT) + 'px';
+    if (bar) bar.style.width = (wr * 100) + '%';
+    if (wrEl) wrEl.textContent = (wr * 100).toFixed(1) + '%';
+    if (rankEl) rankEl.textContent = '#' + (rank + 1);
+  });
+
+  const total = data.total_games;
+  document.getElementById('counter').textContent =
+    `GAME ${frame.game.toLocaleString()} / ${total.toLocaleString()}`;
+
+  if (animTimer !== null || chartFrameLimit !== null) {
+    renderChart(idx);
+  }
+}
+
+function startAnimation() {
+  stopAnimation();
+  animFrame = 0;
+  chartFrameLimit = 0;
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('statsTable').classList.remove('visible');
+
+  function tick() {
+    if (animFrame >= keyframes.length) {
+      finishAnimation();
+      return;
+    }
+    showFrame(animFrame);
+    animFrame++;
+    const speed = parseInt(document.getElementById('speed').value);
+    const delay = Math.round(500 / (1 + (speed - 1) * 0.9));
+    animTimer = setTimeout(tick, delay);
+  }
+  tick();
+}
+
+function stopAnimation() {
+  if (animTimer) {
+    clearTimeout(animTimer);
+    animTimer = null;
+  }
+}
+
+function finishAnimation() {
+  stopAnimation();
+  chartFrameLimit = null;
+  document.getElementById('startBtn').disabled = false;
+  showFrame(keyframes.length - 1);
+  showStats();
+}
+
+function showStats() {
+  // Sort by win rate descending
+  const stats = data.leaderboard.slice().sort((a, b) => b.win_rate - a.win_rate);
+  const tbody = document.getElementById('statsBody');
+  tbody.innerHTML = '';
+  stats.forEach(s => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${cleanName(s.name)}</td>
+      <td>${(s.win_rate * 100).toFixed(1)}%</td>
+      <td>${s.wins}</td>
+      <td>${s.losses}</td>
+      <td>${s.draws}</td>
+      <td>${s.games_played}</td>
+      <td>${s.avg_remaining_pips.toFixed(1)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('statsTable').classList.add('visible');
+}
+
+function reset() {
+  stopAnimation();
+  animFrame = 0;
+  chartFrameLimit = null;
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('statsTable').classList.remove('visible');
+  document.getElementById('counter').textContent = 'READY_';
+  if (keyframes.length > 0) {
+    renderChart();
+    showFrame(0);
+  }
+}
+
+function populateStratFilter() {
+  const sel = document.getElementById('stratFilter');
+  stratNames.forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = cleanName(name);
+    sel.appendChild(opt);
+  });
+}
+
+function renderTeamLeaderboard() {
+  const all = (data.team_leaderboard || []).filter(t => t.games_played >= 50);
+  const doubles = all.filter(t => t.team[0] === t.team[1]);
+  const mixed = all.filter(t => t.team[0] !== t.team[1]).slice(0, 15);
+
+  const dbody = document.getElementById('doublesBody');
+  dbody.innerHTML = '';
+  if (doubles.length === 0) {
+    document.getElementById('doublesTitle').style.display = 'none';
+    document.getElementById('doublesTable').style.display = 'none';
+  } else {
+    doubles.forEach(t => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${cleanName(t.team[0])} x2</td>
+        <td>${(t.win_rate * 100).toFixed(1)}%</td>
+        <td>${t.wins}</td>
+        <td>${t.losses}</td>
+        <td>${t.draws}</td>
+        <td>${t.games_played}</td>
+      `;
+      dbody.appendChild(tr);
+    });
+  }
+
+  const tbody = document.getElementById('teamBody');
+  tbody.innerHTML = '';
+  if (mixed.length === 0) {
+    document.getElementById('teamLeaderboardTitle').style.display = 'none';
+    document.getElementById('teamTable').style.display = 'none';
+  } else {
+    mixed.forEach(t => {
+      const tr = document.createElement('tr');
+      const teamStr = t.team.map(cleanName).join(' + ');
+      tr.innerHTML = `
+        <td>${teamStr}</td>
+        <td>${(t.win_rate * 100).toFixed(1)}%</td>
+        <td>${t.wins}</td>
+        <td>${t.losses}</td>
+        <td>${t.draws}</td>
+        <td>${t.games_played}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+}
+
+// ── Game browser ────────────────────────────────────────────────
+
+function applyFilters() {
+  const search = document.getElementById('searchInput').value.trim().toLowerCase();
+  const stratF = document.getElementById('stratFilter').value;
+  const resultF = document.getElementById('resultFilter').value;
+  const stalemateF = document.getElementById('stalemateFilter').value;
+
+  const games = data.games || [];
+  filteredGames = [];
+
+  for (let i = games.length - 1; i >= 0; i--) {
+    const g = games[i];
+
+    if (search) {
+      const idStr = String(g.game_id);
+      const allStrats = g.strategies.join(' ').toLowerCase();
+      if (!idStr.startsWith(search) && !allStrats.includes(search)) continue;
+    }
+
+    if (stratF && !g.strategies.includes(stratF)) continue;
+
+    if (resultF) {
+      if (resultF === 'draw' && g.winner_team !== null) continue;
+      if (resultF === 'A' && g.winner_team !== 'A') continue;
+      if (resultF === 'B' && g.winner_team !== 'B') continue;
+    }
+
+    if (stalemateF === 'yes' && !g.is_stalemate) continue;
+    if (stalemateF === 'no' && g.is_stalemate) continue;
+
+    filteredGames.push(g);
+  }
+
+  document.getElementById('resultCount').textContent =
+    `${filteredGames.length.toLocaleString()} games`;
+  displayedCount = 0;
+  document.getElementById('gameList').innerHTML = '';
+  loadMoreGames();
+}
+
+function loadMoreGames() {
+  const list = document.getElementById('gameList');
+  const end = Math.min(displayedCount + PAGE_SIZE, filteredGames.length);
+
+  for (let i = displayedCount; i < end; i++) {
+    list.appendChild(createGameRow(filteredGames[i]));
+  }
+  displayedCount = end;
+
+  const btn = document.getElementById('loadMoreBtn');
+  btn.style.display = displayedCount < filteredGames.length ? 'block' : 'none';
+}
+
+function renderMoves(g) {
+  const moves = g.moves;
+  if (!moves || moves.length === 0) return '';
+
+  let html = '<div class="move-list">';
+  moves.forEach((m, i) => {
+    const seat = m[0];
+    const teamClass = (seat === 0 || seat === 2) ? 'team-a' : 'team-b';
+    const teamLetter = (seat === 0 || seat === 2) ? 'A' : 'B';
+    const stratName = cleanName(g.strategies[seat]);
+
+    if (m.length === 1) {
+      html += `<div class="move-item">
+        <span class="move-num">${i + 1}.</span>
+        <span class="move-seat ${teamClass}">${teamLetter}${seat}</span>
+        <span class="move-strat">${stratName}</span>
+        <span class="move-pass">PASS</span>
+      </div>`;
+    } else {
+      const high = m[1], low = m[2], end = m[3] === 'l' ? 'L' : 'R';
+      html += `<div class="move-item">
+        <span class="move-num">${i + 1}.</span>
+        <span class="move-seat ${teamClass}">${teamLetter}${seat}</span>
+        <span class="move-strat">${stratName}</span>
+        <span class="move-tile">[${high}|${low}]</span>
+        <span class="move-end">${end}</span>
+      </div>`;
+    }
+  });
+  html += '</div>';
+  return html;
+}
+
+function createGameRow(g) {
+  const row = document.createElement('div');
+  row.className = 'game-row';
+
+  const teamA = g.team_a.map(cleanName).join('+');
+  const teamB = g.team_b.map(cleanName).join('+');
+
+  let resultBadge;
+  if (g.winner_team === 'A') {
+    resultBadge = '<span class="badge badge-a">TEAM A</span>';
+  } else if (g.winner_team === 'B') {
+    resultBadge = '<span class="badge badge-b">TEAM B</span>';
+  } else {
+    resultBadge = '<span class="badge badge-draw">DRAW</span>';
+  }
+
+  let stalemateBadge = '';
+  if (g.is_stalemate) {
+    if (g.winner_team) {
+      stalemateBadge = ' <span class="badge badge-stalemate-win">STALEMATE</span>';
+    } else {
+      stalemateBadge = ' <span class="badge badge-stalemate">STALEMATE</span>';
+    }
+  }
+
+  const movesHtml = renderMoves(g);
+
+  row.innerHTML = `
+    <div class="game-row-header">
+      <span class="game-id">#${g.game_id}</span>
+      <span class="game-teams">${teamA}<span class="vs">vs</span>${teamB}</span>
+      <div class="game-result">
+        ${resultBadge}${stalemateBadge}
+        <span style="color:var(--text-dim)">${g.points}pts</span>
+      </div>
+    </div>
+    <div class="game-detail">
+      <div class="game-detail-grid">
+        <div>S0 (A): ${cleanName(g.strategies[0])} - ${g.pip_sums['0']}pip</div>
+        <div>S1 (B): ${cleanName(g.strategies[1])} - ${g.pip_sums['1']}pip</div>
+        <div>S2 (A): ${cleanName(g.strategies[2])} - ${g.pip_sums['2']}pip</div>
+        <div>S3 (B): ${cleanName(g.strategies[3])} - ${g.pip_sums['3']}pip</div>
+      </div>
+      <div style="margin-top:0.3rem">
+        Team A: ${g.team_a_pips}pip | Team B: ${g.team_b_pips}pip
+      </div>
+      ${movesHtml}
+    </div>
+  `;
+
+  row.addEventListener('click', () => row.classList.toggle('expanded'));
+  return row;
+}
+
+// ── Win rate line chart ──────────────────────────────────────────
+
+let hiddenLines = new Set();
+let chartFrameLimit = null;
+
+function renderChart(upToFrame) {
+  if (upToFrame !== undefined) chartFrameLimit = upToFrame;
+  const limit = chartFrameLimit !== null ? chartFrameLimit + 1 : keyframes.length;
+
+  const canvas = document.getElementById('wrChart');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = 300 * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = rect.width;
+  const H = 300;
+
+  ctx.clearRect(0, 0, W, H);
+
+  if (keyframes.length < 2) return;
+
+  // Compute bounds - win rate is always 0-1 but zoom to visible range
+  const visibleNames = stratNames.filter(n => !hiddenLines.has(n));
+  let minWR = Infinity, maxWR = -Infinity;
+  for (const frame of keyframes) {
+    for (const name of visibleNames) {
+      const wr = frame.winRates[name] || 0.5;
+      if (wr < minWR) minWR = wr;
+      if (wr > maxWR) maxWR = wr;
+    }
+  }
+  if (!isFinite(minWR)) { minWR = 0.3; maxWR = 0.7; }
+  const pad = Math.max((maxWR - minWR) * 0.1, 0.02);
+  minWR = Math.max(0, minWR - pad);
+  maxWR = Math.min(1, maxWR + pad);
+
+  const marginL = 48, marginR = 10, marginT = 10, marginB = 28;
+  const plotW = W - marginL - marginR;
+  const plotH = H - marginT - marginB;
+
+  // Grid lines
+  ctx.strokeStyle = '#1a1f2b';
+  ctx.lineWidth = 1;
+  const nTicks = 5;
+  ctx.fillStyle = '#4a6a4a';
+  ctx.font = '9px "Press Start 2P", monospace';
+  ctx.textAlign = 'right';
+  for (let i = 0; i <= nTicks; i++) {
+    const y = marginT + (plotH / nTicks) * i;
+    ctx.beginPath();
+    ctx.moveTo(marginL, y);
+    ctx.lineTo(W - marginR, y);
+    ctx.stroke();
+    const val = maxWR - ((maxWR - minWR) / nTicks) * i;
+    ctx.fillText((val * 100).toFixed(0) + '%', marginL - 6, y + 3.5);
+  }
+
+  // X axis labels
+  ctx.textAlign = 'center';
+  const maxGame = keyframes[keyframes.length - 1].game;
+  const xTicks = 5;
+  for (let i = 0; i <= xTicks; i++) {
+    const x = marginL + (plotW / xTicks) * i;
+    const gameNum = Math.round((maxGame / xTicks) * i);
+    let label;
+    if (gameNum >= 1000) {
+      label = (gameNum / 1000).toFixed(0) + 'k';
+    } else {
+      label = String(gameNum);
+    }
+    ctx.fillText(label, x, H - 6);
+  }
+
+  // Draw lines
+  const xScale = (g) => marginL + (g / maxGame) * plotW;
+  const yScale = (wr) => marginT + plotH - ((wr - minWR) / (maxWR - minWR)) * plotH;
+
+  for (let si = stratNames.length - 1; si >= 0; si--) {
+    const name = stratNames[si];
+    if (hiddenLines.has(name)) continue;
+    ctx.strokeStyle = COLORS[si];
+    ctx.lineWidth = 2;
+    ctx.shadowColor = COLORS[si];
+    ctx.shadowBlur = 4;
+    ctx.beginPath();
+    for (let i = 0; i < limit; i++) {
+      const x = xScale(keyframes[i].game);
+      const y = yScale(keyframes[i].winRates[name] || 0.5);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  if (chartFrameLimit === null || limit >= keyframes.length) {
+    buildChartLegend();
+  }
+}
+
+function buildChartLegend() {
+  const legend = document.getElementById('chartLegend');
+  legend.innerHTML = '';
+  stratNames.forEach((name, i) => {
+    const item = document.createElement('span');
+    item.className = 'chart-legend-item' + (hiddenLines.has(name) ? ' dimmed' : '');
+    item.innerHTML = `<span class="chart-legend-swatch" style="background:${COLORS[i]}"></span>${cleanName(name)}`;
+    item.addEventListener('click', () => {
+      if (hiddenLines.has(name)) hiddenLines.delete(name);
+      else hiddenLines.add(name);
+      renderChart();
+    });
+    legend.appendChild(item);
+  });
+}
+
+// Redraw chart on resize
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (data) renderChart(); }, 150);
+});
+
+// Event listeners
+document.getElementById('startBtn').addEventListener('click', startAnimation);
+document.getElementById('resetBtn').addEventListener('click', reset);
+document.getElementById('loadMoreBtn').addEventListener('click', loadMoreGames);
+
+document.getElementById('searchInput').addEventListener('input', applyFilters);
+document.getElementById('stratFilter').addEventListener('change', applyFilters);
+document.getElementById('resultFilter').addEventListener('change', applyFilters);
+document.getElementById('stalemateFilter').addEventListener('change', applyFilters);
+
+loadData();
+</script>
+</body>
+</html>

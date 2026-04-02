@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simple Dominos — Play</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --panel: #0d1117;
+    --border: #1a1f2b;
+    --text: #c0f0c0;
+    --text-dim: #4a6a4a;
+    --text-mid: #6a9a6a;
+    --neon-green: #39ff14;
+    --neon-cyan: #00ffcc;
+    --neon-pink: #ff0080;
+    --neon-orange: #ff6600;
+    --pixel-font: 'Press Start 2P', monospace;
+  }
+
+  body {
+    font-family: var(--pixel-font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1.5rem 1rem;
+    position: relative;
+    image-rendering: pixelated;
+  }
+
+  /* CRT scanline overlay */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.15) 2px,
+      rgba(0, 0, 0, 0.15) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* CRT vignette */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.6) 100%);
+    pointer-events: none;
+    z-index: 9998;
+  }
+
+  a { color: var(--neon-cyan); text-decoration: none; text-shadow: 0 0 4px rgba(0,255,204,0.3); }
+  a:hover { text-shadow: 0 0 8px rgba(0,255,204,0.5); }
+
+  h1 {
+    font-family: var(--pixel-font); font-size: 0.9rem;
+    color: #6abf5e; text-shadow: 0 0 8px rgba(57,255,20,0.25);
+    letter-spacing: 0.05em;
+  }
+  h2 {
+    font-family: var(--pixel-font); font-size: 0.55rem; font-weight: 400;
+    color: #5a9a8a; text-shadow: 0 0 6px rgba(0,255,204,0.15);
+    margin-bottom: 0.75rem; letter-spacing: 0.1em;
+  }
+
+  .subtitle {
+    font-family: var(--pixel-font); color: var(--text-dim);
+    font-size: 0.45rem; margin-top: 0.3rem; margin-bottom: 1rem; line-height: 1.8;
+  }
+
+  button {
+    font-family: var(--pixel-font);
+    padding: 0.5rem 1.2rem; border: 2px solid var(--neon-green);
+    background: transparent; font-size: 0.5rem; cursor: pointer;
+    transition: all 0.15s; text-transform: uppercase; letter-spacing: 0.1em;
+  }
+
+  .btn-primary {
+    color: var(--neon-green);
+    text-shadow: 0 0 6px rgba(57,255,20,0.4);
+    box-shadow: 0 0 8px rgba(57,255,20,0.2), inset 0 0 8px rgba(57,255,20,0.1);
+  }
+  .btn-primary:hover {
+    background: rgba(57,255,20,0.15);
+    box-shadow: 0 0 16px rgba(57,255,20,0.4), inset 0 0 12px rgba(57,255,20,0.15);
+  }
+  .btn-primary:disabled { opacity: 0.3; cursor: default; }
+  .btn-secondary {
+    color: var(--text-mid); border-color: var(--text-mid);
+    box-shadow: 0 0 4px rgba(106,154,106,0.2);
+  }
+  .btn-secondary:hover {
+    background: rgba(106,154,106,0.1);
+    box-shadow: 0 0 8px rgba(106,154,106,0.3);
+  }
+
+  select {
+    font-family: var(--pixel-font);
+    padding: 0.45rem 0.5rem; background: var(--panel); border: 1px solid var(--border);
+    color: var(--text); font-size: 0.42rem; cursor: pointer; outline: none;
+  }
+  select:focus { border-color: var(--neon-green); box-shadow: 0 0 6px rgba(57,255,20,0.2); }
+
+  /* ── Screens ───────────────────────────────────── */
+  .screen { display: none; width: 100%; max-width: 900px; }
+  .screen.active { display: block; }
+
+  /* ── Setup ─────────────────────────────────────── */
+  #setupScreen { max-width: 500px; }
+  .setup-row {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 0.75rem;
+  }
+  .setup-row label {
+    font-family: var(--pixel-font); font-size: 0.42rem;
+    color: var(--text); min-width: 160px;
+  }
+  .setup-row .team-badge {
+    display: inline-block; padding: 0.15rem 0.3rem;
+    font-family: var(--pixel-font); font-size: 0.35rem;
+    border: 1px solid; margin-left: 0.3rem;
+  }
+  .team-a-badge { border-color: var(--neon-cyan); color: var(--neon-cyan); }
+  .team-b-badge { border-color: var(--neon-orange); color: var(--neon-orange); }
+  .setup-row select { flex: 1; max-width: 220px; }
+  .setup-actions { margin-top: 1.25rem; display: flex; gap: 0.75rem; }
+
+  /* ── Game header ───────────────────────────────── */
+  .game-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border);
+    font-family: var(--pixel-font); font-size: 0.42rem; color: var(--text-dim);
+  }
+
+  /* ── Table layout grid ────────────────────────────── */
+  .table-layout {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .table-layout > .player-area.top,
+  .table-layout > .human-hand-area,
+  .table-layout > .actions-row {
+    grid-column: 1 / 4;
+  }
+
+  /* ── Player areas ──────────────────────────────── */
+  .player-area {
+    text-align: center; min-width: 80px; padding: 0.4rem;
+    transition: box-shadow 0.25s, background 0.25s;
+  }
+  .player-area.top { justify-self: center; margin-bottom: 0; }
+  .player-area.side { padding: 0.5rem 0.25rem; }
+  .player-area.side .facedown-tiles { flex-direction: column; }
+  .player-area.active-turn { box-shadow: 0 0 12px 3px rgba(57,255,20,0.4); background: rgba(57,255,20,0.05); }
+  .human-hand-area.active-turn { box-shadow: 0 0 12px 3px rgba(57,255,20,0.4); }
+  .player-label { font-family: var(--pixel-font); font-size: 0.4rem; margin-bottom: 0.25rem; }
+  .player-strat { font-family: var(--pixel-font); font-size: 0.38rem; color: var(--text-dim); margin-bottom: 0.2rem; }
+  .player-count { font-family: var(--pixel-font); font-size: 0.38rem; color: var(--text-dim); margin-bottom: 0.3rem; }
+  .facedown-tiles { display: flex; gap: 3px; justify-content: center; flex-wrap: wrap; }
+
+  /* ── Board — dark green felt ───────────────────── */
+  .board-container {
+    background: radial-gradient(ellipse at center, #1a5c2e, #0e2a18);
+    border: 2px solid #0a1f10;
+    padding: 0.5rem;
+    min-height: 200px;
+    box-shadow: inset 0 2px 8px rgba(0,0,0,0.5);
+  }
+  .board-label { font-family: var(--pixel-font); font-size: 0.38rem; color: #3a6a4a; margin-bottom: 0.4rem; }
+  .board-inner { position: relative; min-height: 160px; overflow: hidden; }
+  .board-empty-msg {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font-family: var(--pixel-font); color: #3a6a4a; font-size: 0.45rem;
+  }
+  .board-tile-wrapper { position: absolute; }
+  .board-tile-wrapper.last-played svg { filter: drop-shadow(0 0 6px var(--neon-orange)); }
+
+  /* ── Drop zones ────────────────────────────────── */
+  .drop-zone {
+    display: none; position: absolute; top: 0; bottom: 0;
+    z-index: 10; border: 2px dashed transparent;
+    align-items: center; justify-content: center;
+    font-family: var(--pixel-font); font-size: 0.45rem;
+    pointer-events: none;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .drop-zone.active {
+    display: flex; pointer-events: auto;
+    border-color: rgba(57,255,20,0.5); background: rgba(57,255,20,0.05); color: var(--neon-green);
+  }
+  .drop-zone.drag-over {
+    background: rgba(57,255,20,0.15); border-color: var(--neon-green);
+  }
+  .drop-zone-left { left: 0; width: 50%; }
+  .drop-zone-right { right: 0; width: 50%; }
+  .drop-zone-center { left: 20%; width: 60%; }
+
+  /* ── SVG tiles ─────────────────────────────────── */
+  .domino-svg { display: block; }
+
+  .hand-tile-wrapper {
+    display: inline-block; cursor: default; user-select: none;
+    transition: transform 0.12s, filter 0.12s;
+  }
+  .hand-tile-wrapper.playable {
+    cursor: grab;
+    filter: drop-shadow(0 0 6px rgba(57,255,20,0.5));
+  }
+  .hand-tile-wrapper.playable:hover {
+    transform: translateY(-4px);
+    filter: drop-shadow(0 0 10px rgba(57,255,20,0.7));
+  }
+  .hand-tile-wrapper.playable:active { cursor: grabbing; }
+  .hand-tile-wrapper.selected {
+    transform: translateY(-5px);
+    filter: drop-shadow(0 0 8px rgba(255,102,0,0.7));
+  }
+  .hand-tile-wrapper.dragging { opacity: 0.4; }
+
+  /* ── Human hand area ───────────────────────────── */
+  .human-hand-area {
+    background: #0e1a0e; border: 1px solid #1a2f1a;
+    padding: 0.75rem; margin-bottom: 0.75rem;
+  }
+  .hand-label { font-family: var(--pixel-font); font-size: 0.42rem; margin-bottom: 0.5rem; }
+  .hand-label .turn-indicator { color: var(--neon-green); text-shadow: 0 0 6px rgba(57,255,20,0.4); }
+  .hand-label .wait-indicator { color: var(--text-dim); }
+  .hand-tiles { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+  /* ── End choice (click fallback) ───────────────── */
+  .end-choice {
+    display: none; margin-top: 0.5rem; padding: 0.5rem;
+    background: var(--panel); border: 1px solid var(--border);
+    gap: 0.5rem; align-items: center;
+    font-family: var(--pixel-font); font-size: 0.42rem;
+  }
+  .end-choice.visible { display: flex; }
+  .end-choice button { margin-left: 0.4rem; }
+
+  /* ── Actions row ───────────────────────────────── */
+  .actions-row { display: flex; gap: 0.75rem; margin-bottom: 1rem; align-items: center; }
+  .pass-btn {
+    color: var(--neon-pink); border-color: var(--neon-pink);
+    box-shadow: 0 0 6px rgba(255,0,128,0.2);
+  }
+  .pass-btn:hover {
+    background: rgba(255,0,128,0.1);
+    box-shadow: 0 0 12px rgba(255,0,128,0.3);
+  }
+  .pass-btn:disabled { opacity: 0.25; cursor: default; }
+  .status-msg { font-family: var(--pixel-font); font-size: 0.42rem; color: var(--text-dim); }
+
+  /* ── Move log ──────────────────────────────────── */
+  .move-log-container {
+    background: var(--panel); border: 1px solid var(--border);
+    padding: 0.75rem; margin-bottom: 1rem;
+  }
+  .move-log-label { font-family: var(--pixel-font); font-size: 0.42rem; margin-bottom: 0.4rem; color: #5a9a8a; }
+  .move-log {
+    max-height: 200px; overflow-y: auto;
+    font-family: var(--pixel-font); font-size: 0.38rem; line-height: 2;
+  }
+  .move-item { display: flex; gap: 0.4rem; padding: 0.1rem 0.3rem; }
+  .move-item:nth-child(odd) { background: rgba(57,255,20,0.03); }
+  .move-num { color: var(--text-dim); min-width: 28px; text-align: right; }
+  .move-seat { min-width: 20px; }
+  .move-seat.team-a { color: var(--neon-cyan); }
+  .move-seat.team-b { color: var(--neon-orange); }
+  .move-strat { color: var(--text-mid); min-width: 100px; }
+  .move-tile-text { color: var(--text); min-width: 44px; }
+  .move-end { color: var(--neon-green); }
+  .move-pass { color: var(--neon-pink); font-style: italic; }
+
+  /* ── Game Over ─────────────────────────────────── */
+  #gameOverScreen { max-width: 560px; }
+  .result-banner { text-align: center; padding: 1.5rem; margin-bottom: 1rem; border: 1px solid; }
+  .result-banner.team-a-win { border-color: var(--neon-cyan); background: rgba(0,255,204,0.05); }
+  .result-banner.team-b-win { border-color: var(--neon-orange); background: rgba(255,102,0,0.05); }
+  .result-banner.draw { border-color: var(--text-dim); background: rgba(74,106,74,0.05); }
+  .result-banner h2 { margin-bottom: 0.3rem; }
+  .result-detail { font-family: var(--pixel-font); font-size: 0.42rem; color: var(--text-mid); }
+  .final-table {
+    width: 100%; border-collapse: collapse;
+    font-family: var(--pixel-font); font-size: 0.4rem; margin-bottom: 1rem;
+  }
+  .final-table th {
+    text-align: left; color: #5a9a8a; font-weight: 400;
+    padding: 0.5rem 0.4rem; border-bottom: 1px solid var(--border);
+  }
+  .final-table td { padding: 0.5rem 0.4rem; border-bottom: 1px solid #111622; color: var(--text); }
+  .final-hand-tiles { display: flex; gap: 4px; flex-wrap: wrap; }
+  .gameover-actions { display: flex; gap: 0.75rem; margin-top: 1rem; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SETUP SCREEN                                               -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="setupScreen" class="screen active">
+  <h1>PLAY DOMINOS</h1>
+  <p class="subtitle">Double-9 &mdash; 4P Pairs</p>
+
+  <h2>CHOOSE OPPONENTS</h2>
+
+  <div class="setup-row">
+    <label>You (Seat 0) <span class="team-badge team-a-badge">Team A</span></label>
+    <span style="color:var(--neon-green); font-size:0.42rem; text-shadow:0 0 6px rgba(57,255,20,0.3)">HUMAN</span>
+  </div>
+
+  <div class="setup-row">
+    <label>Opponent 1 (Seat 1) <span class="team-badge team-b-badge">Team B</span></label>
+    <select id="stratSeat1"></select>
+  </div>
+
+  <div class="setup-row">
+    <label>Partner (Seat 2) <span class="team-badge team-a-badge">Team A</span></label>
+    <select id="stratSeat2"></select>
+  </div>
+
+  <div class="setup-row">
+    <label>Opponent 2 (Seat 3) <span class="team-badge team-b-badge">Team B</span></label>
+    <select id="stratSeat3"></select>
+  </div>
+
+  <div class="setup-actions">
+    <button class="btn-primary" id="startGameBtn">Start Game</button>
+    <a href="index.html" style="font-size:0.42rem; align-self:center">&lt; BACK</a>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- GAME SCREEN                                                -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="gameScreen" class="screen">
+  <div class="game-header">
+    <a href="#" id="backToSetupLink">&lt; SETUP</a>
+    <span>4P PAIRS</span>
+    <span id="moveCounter">MOVE: 0</span>
+  </div>
+
+  <!-- Table layout: Partner top, Opp1 left, Board center, Opp2 right, Hand bottom -->
+  <div class="table-layout">
+
+    <!-- Partner (top, spans full width) -->
+    <div class="player-area top" id="partnerArea">
+      <div class="player-label" style="color:var(--neon-cyan)">Partner (S2) <span class="team-badge team-a-badge">A</span></div>
+      <div class="player-strat" id="partnerStrat"></div>
+      <div class="player-count" id="partnerCount"></div>
+      <div class="facedown-tiles" id="partnerTiles"></div>
+    </div>
+
+    <!-- Opponent 1 (left side) -->
+    <div class="player-area side" id="opp1Area">
+      <div class="player-label" style="color:var(--neon-orange)">Opp 1 <span class="team-badge team-b-badge">B</span></div>
+      <div class="player-strat" id="opp1Strat"></div>
+      <div class="player-count" id="opp1Count"></div>
+      <div class="facedown-tiles" id="opp1Tiles"></div>
+    </div>
+
+    <!-- Board (center) -->
+    <div class="board-container">
+      <div class="board-label">BOARD &mdash; <span id="boardEndsLabel">EMPTY</span></div>
+      <div class="board-inner" id="boardInner">
+        <span class="board-empty-msg" id="boardEmptyMsg">NO TILES PLAYED</span>
+        <div class="drop-zone drop-zone-left" id="dropLeft"><span>&#9664; Left</span></div>
+        <div class="drop-zone drop-zone-right" id="dropRight"><span>Right &#9654;</span></div>
+        <div class="drop-zone drop-zone-center" id="dropCenter"><span>Drop tile here</span></div>
+      </div>
+    </div>
+
+    <!-- Opponent 2 (right side) -->
+    <div class="player-area side" id="opp2Area">
+      <div class="player-label" style="color:var(--neon-orange)">Opp 2 <span class="team-badge team-b-badge">B</span></div>
+      <div class="player-strat" id="opp2Strat"></div>
+      <div class="player-count" id="opp2Count"></div>
+      <div class="facedown-tiles" id="opp2Tiles"></div>
+    </div>
+
+    <!-- Human hand (bottom, spans full width) -->
+    <div class="human-hand-area">
+    <div class="hand-label" id="handLabel">Your Tiles (Team A)</div>
+    <div class="hand-tiles" id="handTiles"></div>
+    <div class="end-choice" id="endChoice">
+      <span>Play on which end?</span>
+      <button class="btn-secondary" id="endLeftBtn">Left</button>
+      <button class="btn-secondary" id="endRightBtn">Right</button>
+      <button class="btn-secondary" id="endCancelBtn" style="margin-left:auto">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Actions (bottom, spans full width) -->
+  <div class="actions-row">
+    <button class="pass-btn" id="passBtn" disabled>Pass</button>
+    <span class="status-msg" id="statusMsg"></span>
+  </div>
+
+  </div><!-- end .table-layout -->
+
+  <!-- Move log -->
+  <div class="move-log-container">
+    <div class="move-log-label">MOVE LOG</div>
+    <div class="move-log" id="moveLog"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- GAME OVER SCREEN                                           -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="gameOverScreen" class="screen">
+  <h1>GAME OVER</h1>
+  <div id="resultBanner" class="result-banner"></div>
+  <table class="final-table" id="finalTable">
+    <thead>
+      <tr><th>Seat</th><th>Remaining</th><th>Pips</th></tr>
+    </thead>
+    <tbody id="finalBody"></tbody>
+  </table>
+  <div class="gameover-actions">
+    <button class="btn-primary" id="playAgainBtn">Play Again</button>
+    <a href="index.html" style="font-size:0.42rem; align-self:center">&lt; BACK</a>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.min.js"></script>
+<script src="js/prng.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/strategies.js"></script>
+<script src="js/encoding.js"></script>
+<script src="js/rl-strategy.js"></script>
+<script>
+// ── SVG Tile Renderer ─────────────────────────────────────────
+
+const PIP_LAYOUTS = {
+  0: [],
+  1: ['MC'],
+  2: ['TL', 'BR'],
+  3: ['TL', 'MC', 'BR'],
+  4: ['TL', 'TR', 'BL', 'BR'],
+  5: ['TL', 'TR', 'MC', 'BL', 'BR'],
+  6: ['TL', 'TR', 'ML', 'MR', 'BL', 'BR'],
+  7: ['TL', 'TR', 'ML', 'MC', 'MR', 'BL', 'BR'],
+  8: ['TL', 'TC', 'TR', 'ML', 'MR', 'BL', 'BC', 'BR'],
+  9: ['TL', 'TC', 'TR', 'ML', 'MC', 'MR', 'BL', 'BC', 'BR'],
+};
+
+function pipPositions(xOff, yOff) {
+  return {
+    TL: [xOff + 7, yOff + 7],  TC: [xOff + 16, yOff + 7],  TR: [xOff + 25, yOff + 7],
+    ML: [xOff + 7, yOff + 16], MC: [xOff + 16, yOff + 16], MR: [xOff + 25, yOff + 16],
+    BL: [xOff + 7, yOff + 25], BC: [xOff + 16, yOff + 25], BR: [xOff + 25, yOff + 25],
+  };
+}
+
+function renderPipsSVG(val, xOff, yOff, pipR) {
+  const pos = pipPositions(xOff, yOff);
+  const layout = PIP_LAYOUTS[val] || [];
+  return layout.map(k => {
+    const [cx, cy] = pos[k];
+    return `<circle cx="${cx}" cy="${cy}" r="${pipR}" fill="#1a1a1a"/>`;
+  }).join('');
+}
+
+function renderTileSVG(leftVal, rightVal, opts = {}) {
+  const vertical = opts.vertical || false;
+  const w = vertical ? 32 : 64;
+  const h = vertical ? 64 : 32;
+  const dispW = opts.width || w;
+  const dispH = opts.height || h;
+  const pipR = opts.pipR || 2.5;
+
+  let pips, divider;
+  if (vertical) {
+    pips = renderPipsSVG(leftVal, 0, 0, pipR) + renderPipsSVG(rightVal, 0, 32, pipR);
+    divider = `<line x1="3" y1="32" x2="29" y2="32" stroke="#8b7d6b" stroke-width="1.5"/>`;
+  } else {
+    pips = renderPipsSVG(leftVal, 0, 0, pipR) + renderPipsSVG(rightVal, 32, 0, pipR);
+    divider = `<line x1="32" y1="3" x2="32" y2="29" stroke="#8b7d6b" stroke-width="1.5"/>`;
+  }
+
+  return `<svg class="domino-svg" viewBox="0 0 ${w} ${h}" width="${dispW}" height="${dispH}">` +
+    `<rect x="1" y="1" width="${w-2}" height="${h-2}" rx="4" fill="#f5f0e1" stroke="#8b7d6b" stroke-width="1.5"/>` +
+    divider + pips + `</svg>`;
+}
+
+function renderTileBackSVG(dispW, dispH) {
+  return `<svg class="domino-svg" viewBox="0 0 64 32" width="${dispW || 40}" height="${dispH || 20}">` +
+    `<rect x="1" y="1" width="62" height="30" rx="4" fill="#2d5a3d" stroke="#1a3d28" stroke-width="1.5"/>` +
+    `<rect x="5" y="5" width="54" height="22" rx="2" fill="none" stroke="#1a3d28" stroke-width="0.75"/>` +
+    `<line x1="5" y1="5" x2="59" y2="27" stroke="#1a3d28" stroke-width="0.5" opacity="0.6"/>` +
+    `<line x1="59" y1="5" x2="5" y2="27" stroke="#1a3d28" stroke-width="0.5" opacity="0.6"/>` +
+    `</svg>`;
+}
+
+// ── Chain Builder ─────────────────────────────────────────────
+
+function buildChain() {
+  const chain = [];
+  let leftEnd = null, rightEnd = null;
+  for (const [seat, action] of game.moveHistory) {
+    if (action.isPass) continue;
+    const t = action.tile;
+    if (chain.length === 0) {
+      chain.push({ tile: t, leftVal: t.low, rightVal: t.high });
+      leftEnd = t.low;
+      rightEnd = t.high;
+    } else if (action.end === 'left') {
+      const matchVal = leftEnd;
+      const otherVal = t.isDouble ? matchVal : t.otherValue(matchVal);
+      chain.unshift({ tile: t, leftVal: otherVal, rightVal: matchVal });
+      leftEnd = otherVal;
+    } else {
+      const matchVal = rightEnd;
+      const otherVal = t.isDouble ? matchVal : t.otherValue(matchVal);
+      chain.push({ tile: t, leftVal: matchVal, rightVal: otherVal });
+      rightEnd = otherVal;
+    }
+  }
+  return chain;
+}
+
+function computeChainPositions(chain, containerWidth) {
+  const pad = 10, gap = 2;
+  const normalW = 60, doubleW = 30;
+  const tileH = 30;
+  const dblExtra = 15; // doubles extend this far above baseline
+  const rowHeight = 68;
+
+  if (chain.length === 0) {
+    return { positions: [], totalHeight: 160, connectors: [], scale: 1 };
+  }
+
+  // ── Pass 1: lay out tiles with U-turn wrapping ──
+  // y starts at pad + dblExtra so doubles (rendered at y - 15) don't clip
+  const positions = [];
+  const connectors = [];
+  let cursor = pad, y = pad + dblExtra, dir = 1;
+
+  for (let i = 0; i < chain.length; i++) {
+    const isD = chain[i].tile.isDouble;
+    const w = isD ? doubleW : normalW;
+
+    if (dir === 1) {
+      const x = cursor;
+      if (i > 0 && x + w > containerWidth - pad) {
+        // U-turn at right edge: connect down, then go left
+        const prev = positions[i - 1];
+        // Connector aligned to right edge of previous tile
+        const connW = 8;
+        const connX = prev.x + prev.w - connW;
+        connectors.push({ x: connX, y1: y + tileH, y2: y + rowHeight, w: connW });
+        y += rowHeight;
+        dir = -1;
+        const xNew = prev.x + prev.w - w;
+        positions.push({ x: xNew, y, w, isDouble: isD, dir });
+        cursor = xNew - gap;
+      } else {
+        positions.push({ x, y, w, isDouble: isD, dir });
+        cursor = x + w + gap;
+      }
+    } else {
+      const x = cursor - w;
+      if (i > 0 && x < pad) {
+        // U-turn at left edge: connect down, then go right
+        const prev = positions[i - 1];
+        const connW = 8;
+        const connX = prev.x;
+        connectors.push({ x: connX, y1: y + tileH, y2: y + rowHeight, w: connW });
+        y += rowHeight;
+        dir = 1;
+        const xNew = prev.x;
+        positions.push({ x: xNew, y, w, isDouble: isD, dir });
+        cursor = xNew + w + gap;
+      } else {
+        positions.push({ x, y, w, isDouble: isD, dir });
+        cursor = x - gap;
+      }
+    }
+  }
+
+  // ── Pass 2: center entire chain ──
+  let minX = Infinity, maxX = -Infinity;
+  for (const p of positions) {
+    if (p.x < minX) minX = p.x;
+    if (p.x + p.w > maxX) maxX = p.x + p.w;
+  }
+  const chainWidth = maxX - minX;
+  const xOffset = (containerWidth - chainWidth) / 2 - minX;
+  for (const p of positions) { p.x += xOffset; }
+  for (const c of connectors) { c.x += xOffset; }
+
+  // ── Pass 3: compute scale if chain overflows ──
+  let scale = 1;
+  let finalMin = Infinity, finalMax = -Infinity;
+  for (const p of positions) {
+    if (p.x < finalMin) finalMin = p.x;
+    if (p.x + p.w > finalMax) finalMax = p.x + p.w;
+  }
+  const available = containerWidth - 2 * pad;
+  const needed = finalMax - finalMin;
+  if (needed > available) {
+    scale = available / needed;
+    const centerX = containerWidth / 2;
+    for (const p of positions) {
+      p.x = centerX + (p.x - centerX) * scale;
+      p.w *= scale;
+    }
+    for (const c of connectors) {
+      c.x = centerX + (c.x - centerX) * scale;
+      c.w *= scale;
+    }
+  }
+
+  const totalHeight = Math.max(160, y + rowHeight + pad);
+  return { positions, totalHeight, connectors, scale };
+}
+
+// ── Game Controller ────────────────────────────────────────────
+
+let game = null;
+let players = null;
+let stratNames = {}; // seat → strategy display name
+let selectedTile = null;
+let humanSeat = 0;
+let aiDelay = 600; // ms between AI turns
+let draggedTile = null;
+let draggedTileEnds = [];
+
+// ── Setup ──────────────────────────────────────────────────────
+
+function populateDropdowns() {
+  const names = Object.keys(STRATEGY_REGISTRY);
+  for (const selId of ['stratSeat1', 'stratSeat2', 'stratSeat3']) {
+    const sel = document.getElementById(selId);
+    for (const name of names) {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = cleanName(name);
+      sel.appendChild(opt);
+    }
+  }
+  // Defaults: varied strategies
+  document.getElementById('stratSeat1').value = 'PassTrackerStrategy';
+  document.getElementById('stratSeat2').value = 'GreedyStrategy';
+  document.getElementById('stratSeat3').value = 'PartnerAwareStrategy';
+}
+
+function cleanName(name) {
+  return name.replace(/Strategy$/, '');
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ── Start Game ─────────────────────────────────────────────────
+
+async function startGame() {
+  const rng = new SeededRNG(Date.now());
+
+  const s1Name = document.getElementById('stratSeat1').value;
+  const s2Name = document.getElementById('stratSeat2').value;
+  const s3Name = document.getElementById('stratSeat3').value;
+
+  const strategyNames = [s1Name, s2Name, s3Name];
+
+  // Preload RL model if any seat uses it
+  if (strategyNames.includes('RLStrategy')) {
+    document.getElementById('startGameBtn').disabled = true;
+    document.getElementById('startGameBtn').textContent = 'LOADING MODEL...';
+    try {
+      await loadRLModel();
+    } catch (e) {
+      alert('Failed to load RL model. RL seats will use Greedy fallback.');
+    }
+    document.getElementById('startGameBtn').disabled = false;
+    document.getElementById('startGameBtn').textContent = 'START GAME';
+  }
+
+  players = [
+    new Player(0, new HumanStrategy(), "You"),
+    new Player(1, STRATEGY_REGISTRY[s1Name](rng), "Opp 1"),
+    new Player(2, STRATEGY_REGISTRY[s2Name](rng), "Partner"),
+    new Player(3, STRATEGY_REGISTRY[s3Name](rng), "Opp 2"),
+  ];
+
+  stratNames = {
+    0: 'You',
+    1: cleanName(s1Name),
+    2: cleanName(s2Name),
+    3: cleanName(s3Name),
+  };
+
+  game = new Game(players, GameMode.PAIRS_4P, rng);
+
+  // Update strategy labels
+  document.getElementById('partnerStrat').textContent = stratNames[2];
+  document.getElementById('opp1Strat').textContent = stratNames[1];
+  document.getElementById('opp2Strat').textContent = stratNames[3];
+
+  selectedTile = null;
+  document.getElementById('moveLog').innerHTML = '';
+  showScreen('gameScreen');
+  updateDisplay();
+  nextTurn();
+}
+
+// ── Turn Management ────────────────────────────────────────────
+
+const seatToAreaId = { 0: null, 1: 'opp1Area', 2: 'partnerArea', 3: 'opp2Area' };
+
+function highlightActivePlayer(seat) {
+  // Clear all highlights
+  document.querySelectorAll('.player-area.active-turn, .human-hand-area.active-turn')
+    .forEach(el => el.classList.remove('active-turn'));
+
+  if (seat === humanSeat) {
+    document.querySelector('.human-hand-area').classList.add('active-turn');
+  } else {
+    const areaId = seatToAreaId[seat];
+    if (areaId) document.getElementById(areaId).classList.add('active-turn');
+  }
+}
+
+function nextTurn() {
+  if (game.gameOver) {
+    showGameOver();
+    return;
+  }
+
+  const seat = game.currentPlayer.seat;
+  highlightActivePlayer(seat);
+
+  if (seat === humanSeat) {
+    enableHumanTurn();
+  } else {
+    disableHumanTurn();
+    setStatus(`${stratNames[seat]} (Seat ${seat}) is thinking...`);
+    setTimeout(async () => {
+      if (game.gameOver) return;
+
+      // Check if this player uses an async strategy (RL)
+      const player = players[seat];
+      let result;
+      if (player.strategy instanceof RLStrategy) {
+        const state = game.getState();
+        const action = await player.strategy.chooseActionAsync(state);
+        result = game.applyAction(action);
+      } else {
+        result = game.step();
+      }
+
+      logMove(result.seat, result.action);
+      updateDisplay();
+      if (result.done) {
+        highlightActivePlayer(-1);
+        showGameOver();
+      } else {
+        nextTurn();
+      }
+    }, aiDelay);
+  }
+}
+
+function enableHumanTurn() {
+  const state = game.getState();
+  const validActions = state.validActions;
+  const canOnlyPass = validActions.length === 1 && validActions[0].isPass;
+
+  document.getElementById('passBtn').disabled = !canOnlyPass;
+  setStatus(canOnlyPass ? "No valid plays — you must pass." : "Your turn! Drag a tile to the board, or click to play.");
+
+  document.getElementById('handLabel').innerHTML =
+    'Your Tiles (Team A) &mdash; <span class="turn-indicator">Your turn!</span>';
+
+  renderHumanHand(state);
+}
+
+function disableHumanTurn() {
+  document.getElementById('passBtn').disabled = true;
+  selectedTile = null;
+  draggedTile = null;
+  draggedTileEnds = [];
+  hideEndChoice();
+  hideDropZones();
+
+  document.getElementById('handLabel').innerHTML =
+    'Your Tiles (Team A) &mdash; <span class="wait-indicator">Waiting...</span>';
+
+  // Re-render hand without playable highlights
+  const state = game.getState();
+  renderHumanHandPassive(state);
+}
+
+// ── Human Interaction ──────────────────────────────────────────
+
+function onTileClick(tile) {
+  if (game.gameOver || game.currentPlayer.seat !== humanSeat) return;
+
+  const state = game.getState();
+  // Find valid actions for this tile
+  const tileActions = state.validActions.filter(a => a.tile === tile);
+  if (tileActions.length === 0) return;
+
+  if (tileActions.length === 1) {
+    // Only one valid placement — play immediately
+    applyHumanAction(tileActions[0]);
+  } else {
+    // Multiple placements — show end choice
+    selectedTile = tile;
+    renderHumanHand(state); // re-render to show selected state
+    showEndChoice(tile, tileActions);
+  }
+}
+
+function onEndChoice(end) {
+  if (!selectedTile) return;
+  const action = Action.play(selectedTile, end);
+  applyHumanAction(action);
+}
+
+function onPass() {
+  applyHumanAction(Action.pass());
+}
+
+function applyHumanAction(action) {
+  selectedTile = null;
+  draggedTile = null;
+  draggedTileEnds = [];
+  hideEndChoice();
+  hideDropZones();
+
+  const result = game.applyAction(action);
+  logMove(result.seat, result.action);
+  updateDisplay();
+
+  if (result.done) {
+    highlightActivePlayer(-1);
+    showGameOver();
+  } else {
+    nextTurn();
+  }
+}
+
+function showEndChoice(tile, actions) {
+  const el = document.getElementById('endChoice');
+  const leftBtn = document.getElementById('endLeftBtn');
+  const rightBtn = document.getElementById('endRightBtn');
+
+  const hasLeft = actions.some(a => a.end === 'left');
+  const hasRight = actions.some(a => a.end === 'right');
+
+  leftBtn.style.display = hasLeft ? 'inline-block' : 'none';
+  rightBtn.style.display = hasRight ? 'inline-block' : 'none';
+
+  // Add board end info to buttons
+  const ends = game.board.ends;
+  if (ends) {
+    leftBtn.textContent = `Left (${ends[0]})`;
+    rightBtn.textContent = `Right (${ends[1]})`;
+  }
+
+  el.classList.add('visible');
+}
+
+function hideEndChoice() {
+  document.getElementById('endChoice').classList.remove('visible');
+}
+
+// ── Display ────────────────────────────────────────────────────
+
+function updateDisplay() {
+  updateBoard();
+  updateOpponentAreas();
+  updateMoveCounter();
+  // Hand is rendered separately in enable/disableHumanTurn
+}
+
+function updateBoard() {
+  const boardInner = document.getElementById('boardInner');
+  const emptyMsg = document.getElementById('boardEmptyMsg');
+  const ends = game.board.ends;
+
+  // Remove old tile wrappers and connectors (keep drop zones and empty msg)
+  boardInner.querySelectorAll('.board-tile-wrapper, .board-connector').forEach(el => el.remove());
+
+  if (game.board.isEmpty) {
+    emptyMsg.style.display = '';
+    document.getElementById('boardEndsLabel').textContent = 'empty';
+    boardInner.style.height = '160px';
+    return;
+  }
+
+  emptyMsg.style.display = 'none';
+  document.getElementById('boardEndsLabel').textContent =
+    `L: ${ends[0]} | R: ${ends[1]}`;
+
+  const chain = buildChain();
+  const containerWidth = boardInner.offsetWidth || 700;
+  const { positions, totalHeight, connectors, scale } = computeChainPositions(chain, containerWidth);
+  boardInner.style.height = totalHeight + 'px';
+
+  const s = scale;
+  const tileW = Math.round(60 * s);
+  const tileH = Math.round(30 * s);
+  const dblW = Math.round(30 * s);
+  const dblH = Math.round(60 * s);
+  const dblOffset = Math.round(15 * s);
+
+  // Draw U-turn connectors
+  for (const conn of connectors) {
+    const bar = document.createElement('div');
+    bar.className = 'board-connector';
+    const cw = Math.round(conn.w || 8);
+    const ch = conn.y2 - conn.y1;
+    bar.style.cssText = `position:absolute; left:${conn.x}px; top:${conn.y1}px;` +
+      `width:${cw}px; height:${ch}px; z-index:5;` +
+      `background:#d4c9a8; border-radius:3px; opacity:0.7;`;
+    boardInner.appendChild(bar);
+  }
+
+  const lastMove = game.moveHistory.length > 0 ? game.moveHistory[game.moveHistory.length - 1] : null;
+  const lastTile = lastMove && !lastMove[1].isPass ? lastMove[1].tile : null;
+
+  for (let i = 0; i < chain.length; i++) {
+    const entry = chain[i];
+    const pos = positions[i];
+    const isD = entry.tile.isDouble;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'board-tile-wrapper';
+    if (lastTile === entry.tile) wrapper.classList.add('last-played');
+    wrapper.style.left = pos.x + 'px';
+    wrapper.style.top = (isD ? pos.y - dblOffset : pos.y) + 'px';
+
+    // When direction is RTL (dir === -1), flip tile values so the
+    // connecting end faces the correct direction visually
+    const flipH = pos.dir === -1;
+    const lv = flipH ? entry.rightVal : entry.leftVal;
+    const rv = flipH ? entry.leftVal : entry.rightVal;
+
+    if (isD) {
+      wrapper.innerHTML = renderTileSVG(lv, rv, { vertical: true, width: dblW, height: dblH });
+    } else {
+      wrapper.innerHTML = renderTileSVG(lv, rv, { width: tileW, height: tileH });
+    }
+    boardInner.appendChild(wrapper);
+  }
+}
+
+function updateOpponentAreas() {
+  for (const p of players) {
+    if (p.seat === humanSeat) continue;
+    let countEl, tilesEl;
+    if (p.seat === 1) {
+      countEl = document.getElementById('opp1Count');
+      tilesEl = document.getElementById('opp1Tiles');
+    } else if (p.seat === 2) {
+      countEl = document.getElementById('partnerCount');
+      tilesEl = document.getElementById('partnerTiles');
+    } else {
+      countEl = document.getElementById('opp2Count');
+      tilesEl = document.getElementById('opp2Tiles');
+    }
+    const n = p.tileCount;
+    countEl.textContent = `${n} tile${n !== 1 ? 's' : ''}`;
+    tilesEl.innerHTML = '';
+    for (let i = 0; i < n; i++) {
+      const d = document.createElement('div');
+      d.style.display = 'inline-block';
+      d.innerHTML = renderTileBackSVG(36, 18);
+      tilesEl.appendChild(d);
+    }
+  }
+}
+
+function renderHumanHand(state) {
+  const container = document.getElementById('handTiles');
+  container.innerHTML = '';
+
+  // Build map of tile → valid ends
+  const playableTiles = new Map();
+  for (const a of state.validActions) {
+    if (a.tile) {
+      if (!playableTiles.has(a.tile)) playableTiles.set(a.tile, []);
+      playableTiles.get(a.tile).push(a.end);
+    }
+  }
+
+  for (const tile of state.hand) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'hand-tile-wrapper';
+    wrapper.innerHTML = renderTileSVG(tile.low, tile.high, { width: 72, height: 36 });
+
+    if (playableTiles.has(tile)) {
+      const validEnds = playableTiles.get(tile);
+      wrapper.classList.add('playable');
+      wrapper.draggable = true;
+      wrapper.addEventListener('dragstart', (e) => onDragStart(e, tile, validEnds));
+      wrapper.addEventListener('dragend', onDragEnd);
+      // Click fallback
+      wrapper.addEventListener('click', () => onTileClick(tile));
+    }
+
+    if (selectedTile === tile) {
+      wrapper.classList.add('selected');
+    }
+
+    container.appendChild(wrapper);
+  }
+}
+
+function renderHumanHandPassive(state) {
+  const container = document.getElementById('handTiles');
+  container.innerHTML = '';
+  const humanPlayer = players[humanSeat];
+  for (const tile of humanPlayer.hand) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'hand-tile-wrapper';
+    wrapper.innerHTML = renderTileSVG(tile.low, tile.high, { width: 72, height: 36 });
+    container.appendChild(wrapper);
+  }
+}
+
+// ── Drag and Drop ─────────────────────────────────────────────
+
+function onDragStart(e, tile, validEnds) {
+  draggedTile = tile;
+  draggedTileEnds = validEnds;
+  e.dataTransfer.effectAllowed = 'move';
+  e.target.classList.add('dragging');
+  showDropZones(validEnds);
+}
+
+function onDragEnd(e) {
+  e.target.classList.remove('dragging');
+  draggedTile = null;
+  draggedTileEnds = [];
+  hideDropZones();
+}
+
+function showDropZones(validEnds) {
+  const isEmpty = game.board.isEmpty;
+  if (isEmpty) {
+    document.getElementById('dropCenter').classList.add('active');
+  } else {
+    if (validEnds.includes('left')) document.getElementById('dropLeft').classList.add('active');
+    if (validEnds.includes('right')) document.getElementById('dropRight').classList.add('active');
+  }
+}
+
+function hideDropZones() {
+  for (const id of ['dropLeft', 'dropRight', 'dropCenter']) {
+    const el = document.getElementById(id);
+    el.classList.remove('active', 'drag-over');
+  }
+}
+
+function setupDropZone(el, end) {
+  el.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    el.classList.add('drag-over');
+  });
+  el.addEventListener('dragleave', () => {
+    el.classList.remove('drag-over');
+  });
+  el.addEventListener('drop', (e) => {
+    e.preventDefault();
+    el.classList.remove('drag-over');
+    if (!draggedTile) return;
+    const playEnd = end || 'left'; // center zone uses 'left' for first move
+    applyHumanAction(Action.play(draggedTile, playEnd));
+  });
+}
+
+function updateMoveCounter() {
+  document.getElementById('moveCounter').textContent =
+    `MOVE: ${game.moveHistory.length}`;
+}
+
+function logMove(seat, action) {
+  const log = document.getElementById('moveLog');
+  const num = game.moveHistory.length;
+  const teamClass = (seat === 0 || seat === 2) ? 'team-a' : 'team-b';
+  const teamLetter = (seat === 0 || seat === 2) ? 'A' : 'B';
+
+  let html;
+  if (action.isPass) {
+    html = `<div class="move-item">
+      <span class="move-num">${num}.</span>
+      <span class="move-seat ${teamClass}">${teamLetter}${seat}</span>
+      <span class="move-strat">${stratNames[seat]}</span>
+      <span class="move-pass">pass</span>
+    </div>`;
+  } else {
+    const endLabel = action.end.charAt(0).toUpperCase() + action.end.slice(1);
+    html = `<div class="move-item">
+      <span class="move-num">${num}.</span>
+      <span class="move-seat ${teamClass}">${teamLetter}${seat}</span>
+      <span class="move-strat">${stratNames[seat]}</span>
+      <span class="move-tile-text">[${action.tile.low}|${action.tile.high}]</span>
+      <span class="move-end">${endLabel}</span>
+    </div>`;
+  }
+
+  log.insertAdjacentHTML('beforeend', html);
+  log.scrollTop = log.scrollHeight;
+}
+
+function setStatus(msg) {
+  document.getElementById('statusMsg').textContent = msg;
+}
+
+// ── Game Over ──────────────────────────────────────────────────
+
+function showGameOver() {
+  const result = game.buildResult();
+
+  // Determine winner display
+  const banner = document.getElementById('resultBanner');
+  let bannerClass, title, detail;
+
+  if (result.winnerSeats.length === 0) {
+    bannerClass = 'draw';
+    title = 'Draw!';
+    detail = 'Both teams tied in a stalemate.';
+  } else {
+    const isTeamA = result.winnerSeats.includes(0);
+    bannerClass = isTeamA ? 'team-a-win' : 'team-b-win';
+    const teamName = isTeamA ? 'Team A' : 'Team B';
+    const youWon = isTeamA;
+    title = youWon ? 'You Win!' : 'You Lose';
+    detail = `${teamName} wins! ${result.points} points scored.`;
+    if (result.isStalemate) detail += ' (via stalemate)';
+  }
+
+  banner.className = 'result-banner ' + bannerClass;
+  banner.innerHTML = `<h2>${title}</h2><div class="result-detail">${detail}</div>`;
+
+  // Final hands table
+  const tbody = document.getElementById('finalBody');
+  tbody.innerHTML = '';
+
+  for (let seat = 0; seat < 4; seat++) {
+    const tr = document.createElement('tr');
+    const teamClass = (seat === 0 || seat === 2) ? 'team-a' : 'team-b';
+    const teamLetter = (seat === 0 || seat === 2) ? 'A' : 'B';
+    const hand = result.finalHands[seat];
+    const pips = result.pipSums[seat];
+
+    let tilesHtml = '';
+    if (hand.length === 0) {
+      tilesHtml = '<span style="color:#56d364; font-size:0.75rem">Empty!</span>';
+    } else {
+      tilesHtml = '<div class="final-hand-tiles">';
+      for (const tile of hand) {
+        tilesHtml += renderTileSVG(tile.low, tile.high, { width: 52, height: 26 });
+      }
+      tilesHtml += '</div>';
+    }
+
+    tr.innerHTML = `
+      <td><span class="move-seat ${teamClass}">${teamLetter}${seat}</span> ${stratNames[seat]}</td>
+      <td>${tilesHtml}</td>
+      <td>${pips}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  showScreen('gameOverScreen');
+}
+
+// ── Event Listeners ────────────────────────────────────────────
+
+document.getElementById('startGameBtn').addEventListener('click', startGame);
+document.getElementById('playAgainBtn').addEventListener('click', () => showScreen('setupScreen'));
+document.getElementById('passBtn').addEventListener('click', onPass);
+document.getElementById('endLeftBtn').addEventListener('click', () => onEndChoice('left'));
+document.getElementById('endRightBtn').addEventListener('click', () => onEndChoice('right'));
+document.getElementById('endCancelBtn').addEventListener('click', () => {
+  selectedTile = null;
+  hideEndChoice();
+  const state = game.getState();
+  renderHumanHand(state);
+});
+
+document.getElementById('backToSetupLink').addEventListener('click', (e) => {
+  e.preventDefault();
+  if (game && !game.gameOver) {
+    if (!confirm('Leave the current game?')) return;
+  }
+  showScreen('setupScreen');
+});
+
+// Init drop zones
+setupDropZone(document.getElementById('dropLeft'), 'left');
+setupDropZone(document.getElementById('dropRight'), 'right');
+setupDropZone(document.getElementById('dropCenter'), 'left');
+
+// Init
+populateDropdowns();
+</script>
+</body>
+</html>

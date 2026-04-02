@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Engine Tests</title>
+<style>
+  body {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    background: #0f1117;
+    color: #e1e4e8;
+    padding: 2rem;
+    font-size: 0.85rem;
+    line-height: 1.8;
+  }
+  h1 { font-size: 1.2rem; margin-bottom: 1rem; }
+  .pass { color: #56d364; }
+  .fail { color: #f85149; font-weight: bold; }
+  .section { color: #79c0ff; font-weight: bold; margin-top: 1rem; }
+  #summary { margin-top: 1.5rem; font-size: 1rem; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>Dominos Engine Tests</h1>
+<div id="output"></div>
+<div id="summary"></div>
+
+<script src="js/prng.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/strategies.js"></script>
+<script>
+const out = document.getElementById('output');
+let passed = 0;
+let failed = 0;
+
+function log(msg, cls) {
+  const d = document.createElement('div');
+  d.className = cls || '';
+  d.textContent = msg;
+  out.appendChild(d);
+}
+
+function section(name) { log(`\n── ${name} ──`, 'section'); }
+
+function assert(cond, msg) {
+  if (cond) {
+    passed++;
+    log(`  PASS: ${msg}`, 'pass');
+  } else {
+    failed++;
+    log(`  FAIL: ${msg}`, 'fail');
+  }
+}
+
+function assertEqual(a, b, msg) {
+  assert(a === b, `${msg} (got ${a}, expected ${b})`);
+}
+
+// ── PRNG ───────────────────────────────────────────────────────
+
+section('SeededRNG');
+{
+  const rng1 = new SeededRNG(42);
+  const rng2 = new SeededRNG(42);
+  const v1 = rng1.random();
+  const v2 = rng2.random();
+  assertEqual(v1, v2, 'Same seed produces same value');
+  assert(v1 >= 0 && v1 < 1, 'random() in [0, 1)');
+
+  const ri = rng1.randint(1, 6);
+  assert(ri >= 1 && ri <= 6, 'randint(1, 6) in range');
+
+  const arr = [1, 2, 3, 4, 5];
+  const c = rng1.choice(arr);
+  assert(arr.includes(c), 'choice returns element from array');
+
+  const shuf = [1, 2, 3, 4, 5, 6, 7, 8];
+  rng1.shuffle(shuf);
+  assertEqual(shuf.length, 8, 'shuffle preserves length');
+  assert(shuf.sort((a, b) => a - b).join() === '1,2,3,4,5,6,7,8', 'shuffle preserves elements');
+}
+
+// ── Tile ───────────────────────────────────────────────────────
+
+section('Tile');
+{
+  const t = Tile.of(3, 7);
+  assertEqual(t.high, 7, 'Tile.of(3,7).high = 7 (canonical)');
+  assertEqual(t.low, 3, 'Tile.of(3,7).low = 3');
+
+  const t2 = Tile.of(7, 3);
+  assert(t === t2, 'Tile.of(3,7) === Tile.of(7,3) (interning)');
+
+  assertEqual(t.pipSum, 10, 'pipSum = 10');
+  assert(!t.isDouble, '[3|7] is not double');
+
+  const d = Tile.of(5, 5);
+  assert(d.isDouble, '[5|5] is double');
+  assertEqual(d.pipSum, 10, '[5|5] pipSum = 10');
+
+  assert(t.hasValue(3), '[3|7] hasValue(3)');
+  assert(t.hasValue(7), '[3|7] hasValue(7)');
+  assert(!t.hasValue(5), '[3|7] !hasValue(5)');
+
+  assertEqual(t.otherValue(3), 7, '[3|7] otherValue(3) = 7');
+  assertEqual(t.otherValue(7), 3, '[3|7] otherValue(7) = 3');
+
+  let threw = false;
+  try { t.otherValue(5); } catch (e) { threw = true; }
+  assert(threw, 'otherValue(5) throws on [3|7]');
+}
+
+// ── Board ──────────────────────────────────────────────────────
+
+section('Board');
+{
+  const b = new Board();
+  assert(b.isEmpty, 'New board is empty');
+  assertEqual(b.ends, null, 'Empty board ends = null');
+
+  // First tile
+  b.play(Tile.of(3, 7), 'left');
+  assert(!b.isEmpty, 'Board not empty after play');
+  assertEqual(b.ends[0], 3, 'Left end = 3 (low)');
+  assertEqual(b.ends[1], 7, 'Right end = 7 (high)');
+
+  // Play on left
+  b.play(Tile.of(3, 5), 'left');
+  assertEqual(b.ends[0], 5, 'Left end = 5 after playing [3|5] left');
+  assertEqual(b.ends[1], 7, 'Right end still 7');
+
+  // Play on right
+  b.play(Tile.of(7, 9), 'right');
+  assertEqual(b.ends[0], 5, 'Left end still 5');
+  assertEqual(b.ends[1], 9, 'Right end = 9');
+
+  // Can play
+  assert(b.canPlay(Tile.of(5, 2)), 'Can play [2|5] (matches left end 5)');
+  assert(b.canPlay(Tile.of(9, 1)), 'Can play [1|9] (matches right end 9)');
+  assert(!b.canPlay(Tile.of(1, 2)), 'Cannot play [1|2] (no match)');
+
+  // Valid placements
+  const vp = b.validPlacements(Tile.of(5, 9));
+  assert(vp.includes('left'), '[5|9] can go left (matches 5)');
+  assert(vp.includes('right'), '[5|9] can go right (matches 9)');
+
+  // Double on board
+  const b2 = new Board();
+  b2.play(Tile.of(4, 4), 'left');
+  assertEqual(b2.ends[0], 4, 'Double: left = 4');
+  assertEqual(b2.ends[1], 4, 'Double: right = 4');
+
+  // Invalid play
+  let threw = false;
+  try { b.play(Tile.of(1, 2), 'left'); } catch (e) { threw = true; }
+  assert(threw, 'Playing non-matching tile throws');
+}
+
+// ── Full Set ───────────────────────────────────────────────────
+
+section('Full Set');
+{
+  const tiles = createFullSet();
+  assertEqual(tiles.length, 55, 'Full set has 55 tiles');
+
+  // Check uniqueness via interning
+  const unique = new Set(tiles);
+  assertEqual(unique.size, 55, 'All 55 tiles are unique (Set)');
+
+  // Count doubles
+  const doubles = tiles.filter(t => t.isDouble);
+  assertEqual(doubles.length, 10, '10 doubles in set (0-9)');
+}
+
+// ── Action ─────────────────────────────────────────────────────
+
+section('Action');
+{
+  const pass = Action.pass();
+  assert(pass.isPass, 'Action.pass() isPass');
+  assertEqual(pass.tile, null, 'pass has no tile');
+
+  const tile = Tile.of(3, 7);
+  const play = Action.play(tile, 'left');
+  assert(!play.isPass, 'Action.play() is not pass');
+  assert(play.tile === tile, 'play.tile is correct');
+  assertEqual(play.end, 'left', 'play.end = left');
+
+  const play2 = Action.play(Tile.of(3, 7), 'left');
+  assert(play.equals(play2), 'Same tile+end actions are equal');
+
+  const play3 = Action.play(Tile.of(3, 7), 'right');
+  assert(!play.equals(play3), 'Different end actions are not equal');
+
+  assert(!pass.equals(play), 'Pass != play');
+  assert(pass.equals(Action.pass()), 'Pass == pass');
+}
+
+// ── Game: Full Random 4P ───────────────────────────────────────
+
+section('Game: Complete Random 4P');
+{
+  const rng = new SeededRNG(12345);
+  const ps = [
+    new Player(0, new RandomStrategy(rng)),
+    new Player(1, new RandomStrategy(rng)),
+    new Player(2, new RandomStrategy(rng)),
+    new Player(3, new RandomStrategy(rng)),
+  ];
+
+  const g = new Game(ps, GameMode.PAIRS_4P, rng);
+
+  // Each player dealt 10
+  for (const p of ps) {
+    assertEqual(p.tileCount, 10, `Seat ${p.seat} has 10 tiles`);
+  }
+
+  const result = g.playRound();
+  assert(g.gameOver, 'Game is over after playRound');
+  assert(result.moveHistory.length > 0, 'Move history is not empty');
+  assert(typeof result.points === 'number', 'Points is a number');
+  assert(result.isStalemate === true || result.isStalemate === false, 'isStalemate is boolean');
+}
+
+// ── Game: getState() and applyAction() ─────────────────────────
+
+section('Game: getState/applyAction');
+{
+  const rng = new SeededRNG(99);
+  const ps = [
+    new Player(0, new HumanStrategy()),
+    new Player(1, new RandomStrategy(rng)),
+    new Player(2, new RandomStrategy(rng)),
+    new Player(3, new RandomStrategy(rng)),
+  ];
+
+  const g = new Game(ps, GameMode.PAIRS_4P, rng);
+  let movesMade = 0;
+  let maxMoves = 200;
+
+  while (!g.gameOver && movesMade < maxMoves) {
+    if (g.currentPlayer.seat === 0) {
+      const state = g.getState();
+      assert(state.validActions.length > 0, `Human has valid actions (move ${movesMade})`);
+      const action = state.validActions[0];
+      g.applyAction(action);
+    } else {
+      g.step();
+    }
+    movesMade++;
+  }
+  assert(g.gameOver, 'Game completed with human applyAction()');
+}
+
+// ── Strategies: Each Returns Valid Action ──────────────────────
+
+section('Strategies: Valid Actions');
+{
+  const rng = new SeededRNG(77);
+  const strategyNames = Object.keys(STRATEGY_REGISTRY);
+
+  for (const name of strategyNames) {
+    const strat = STRATEGY_REGISTRY[name](rng);
+    // Create a game and get a state
+    const testRng = new SeededRNG(42);
+    const ps = [
+      new Player(0, strat),
+      new Player(1, new RandomStrategy(testRng)),
+      new Player(2, new RandomStrategy(testRng)),
+      new Player(3, new RandomStrategy(testRng)),
+    ];
+    const g = new Game(ps, GameMode.PAIRS_4P, testRng);
+
+    // Advance until it's seat 0's turn (or game starts with seat 0)
+    let attempts = 0;
+    while (g.currentPlayer.seat !== 0 && !g.gameOver && attempts < 20) {
+      g.step();
+      attempts++;
+    }
+
+    if (!g.gameOver && g.currentPlayer.seat === 0) {
+      const state = g.getState();
+      const action = strat.chooseAction(state);
+      const isValid = state.validActions.some(a => a.equals(action));
+      assert(isValid, `${name} returns valid action`);
+    } else {
+      // Game ended before seat 0's turn — just mark pass
+      log(`  SKIP: ${name} — game ended before seat 0 turn`, 'pass');
+      passed++;
+    }
+  }
+}
+
+// ── 100 Random Games Complete Without Error ────────────────────
+
+section('100 Random Games');
+{
+  let allOk = true;
+  const stratList = Object.keys(STRATEGY_REGISTRY);
+
+  for (let i = 0; i < 100; i++) {
+    try {
+      const rng = new SeededRNG(i * 137);
+      // Pick random strategies
+      const picks = [
+        STRATEGY_REGISTRY[stratList[i % stratList.length]](rng),
+        STRATEGY_REGISTRY[stratList[(i + 1) % stratList.length]](rng),
+        STRATEGY_REGISTRY[stratList[(i + 2) % stratList.length]](rng),
+        STRATEGY_REGISTRY[stratList[(i + 3) % stratList.length]](rng),
+      ];
+      const ps = picks.map((s, seat) => new Player(seat, s));
+      const g = new Game(ps, GameMode.PAIRS_4P, rng);
+      const result = g.playRound();
+
+      // Basic sanity
+      if (!g.gameOver) { allOk = false; break; }
+      if (result.moveHistory.length === 0) { allOk = false; break; }
+    } catch (e) {
+      log(`  Game ${i} error: ${e.message}`, 'fail');
+      allOk = false;
+      failed++;
+      break;
+    }
+  }
+  assert(allOk, '100 random games completed without error');
+}
+
+// ── Board: Same-Ends Edge Case ─────────────────────────────────
+
+section('Board: Same-Ends Placement');
+{
+  // When both ends are the same value, a tile matching that value
+  // should only show "left" (not both), unless it's a double
+  const b = new Board();
+  b.play(Tile.of(3, 3), 'left'); // Double 3: both ends = 3
+  assertEqual(b.ends[0], 3, 'Left end = 3');
+  assertEqual(b.ends[1], 3, 'Right end = 3');
+
+  const vp1 = b.validPlacements(Tile.of(3, 7));
+  // When left_end == right_end, tile matching both — only "left" unless it's a double
+  assertEqual(vp1.length, 1, '[3|7] has 1 placement when both ends are 3');
+  assertEqual(vp1[0], 'left', '[3|7] goes left');
+
+  const vp2 = b.validPlacements(Tile.of(3, 3));
+  // Double matching same ends — should get both
+  assertEqual(vp2.length, 2, '[3|3] has 2 placements when both ends are 3');
+}
+
+// ── Summary ────────────────────────────────────────────────────
+
+const sum = document.getElementById('summary');
+if (failed === 0) {
+  sum.textContent = `All ${passed} tests passed!`;
+  sum.style.color = '#56d364';
+} else {
+  sum.textContent = `${passed} passed, ${failed} failed`;
+  sum.style.color = '#f85149';
+}
+</script>
+</body>
+</html>
