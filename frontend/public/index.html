@@ -100,6 +100,28 @@
   }
   .subtitle a:hover { text-shadow: 0 0 12px rgba(0, 255, 204, 0.6); }
 
+  .play-cta {
+    position: relative;
+    display: inline-block;
+  }
+
+  .play-arrow {
+    position: absolute;
+    left: -1.8em;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--neon-cyan);
+    font-size: 0.7rem;
+    animation: bounce-arrow 1s ease-in-out infinite;
+    text-shadow: 0 0 8px rgba(0, 255, 204, 0.6);
+    pointer-events: none;
+  }
+
+  @keyframes bounce-arrow {
+    0%, 100% { transform: translateY(-50%) translateX(0); }
+    50% { transform: translateY(-50%) translateX(4px); }
+  }
+
   h2 {
     font-family: var(--pixel-font);
     font-size: 0.6rem;
@@ -564,7 +586,7 @@
   <div class="domino-deco">&#x1F062; &#x1F04B; &#x1F053;</div>
   <h1>DOMINOS</h1>
   <div class="title-decoration">STRATEGY LAB</div>
-  <p class="subtitle">8 strategies compete in 4P Pairs &mdash; <a href="play.html">PLAY &gt;</a></p>
+  <p class="subtitle">8 strategies compete in 4P Pairs &mdash; <span class="play-cta"><span class="play-arrow">&#9658;</span><a href="play.html">PLAY &gt;</a></span></p>
 </div>
 
 <div class="controls">
