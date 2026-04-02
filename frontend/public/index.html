@@ -262,6 +262,25 @@
     color: var(--text);
     width: 140px;
     flex-shrink: 0;
+    position: relative;
+    cursor: help;
+  }
+
+  .strat-name[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 0;
+    top: 100%;
+    margin-top: 4px;
+    background: #0a0a0a;
+    color: var(--neon-cyan);
+    border: 1px solid var(--neon-cyan);
+    box-shadow: 0 0 8px rgba(0, 255, 204, 0.3);
+    padding: 0.4em 0.6em;
+    font-size: 0.4rem;
+    white-space: nowrap;
+    z-index: 100;
+    pointer-events: none;
   }
 
   .wr-bar-container {
@@ -683,6 +702,18 @@
 <p class="loading" id="loadingMsg">LOADING DATA...</p>
 
 <script>
+const DESCRIPTIONS = {
+  'GreedyDoublesStrategy': 'Plays doubles first, then highest pip-sum tile',
+  'GreedyStrategy': 'Always plays the highest pip-sum tile available',
+  'NeverPassedStrategy': 'Maximizes pip coverage to avoid ever passing',
+  'PassTrackerStrategy': 'Tracks opponent passes to exploit their gaps',
+  'NonGreedyStrategy': 'Plays lowest pip-sum tiles first',
+  'RLStrategy': 'Neural network trained via reinforcement learning',
+  'RandomStrategy': 'Picks a random valid move',
+  'LateGameStrategy': 'Keeps well-connected tiles, plays least-connected first',
+  'PartnerAwareStrategy': 'Reads partner signals and coordinates plays',
+};
+
 const COLORS = [
   '#ff0080', '#00ffcc', '#39ff14', '#d2a8ff',
   '#ff6600', '#ff4444', '#ffff00', '#00aaff',
@@ -784,7 +815,7 @@ function renderLeaderboard() {
     row.innerHTML = `
       <span class="rank" id="rank-${name}">#${i + 1}</span>
       <span class="color-dot" style="background:${COLORS[i]}"></span>
-      <span class="strat-name">${cleanName(name)}</span>
+      <span class="strat-name" data-tooltip="${DESCRIPTIONS[name] || ''}">${cleanName(name)}</span>
       <div class="wr-bar-container">
         <div class="wr-bar" id="bar-${name}" style="background:${COLORS[i]};width:50%"></div>
       </div>
